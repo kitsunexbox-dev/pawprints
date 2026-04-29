@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
 
 function App() {
@@ -22,6 +22,37 @@ function App() {
 }
 
 function Dashboard({ onNavigate }) {
+  const [walks, setWalks] = useState([]);
+
+  useEffect(() => {
+    const fetchWalks = async () => {
+      const { data, error } = await supabase
+        .from("walks")
+        .select("*")
+        .order("date", { ascending: false });
+      if (!error) setWalks(data);
+    };
+    fetchWalks();
+  }, []);
+
+  const thisWeekWalks = walks.filter((w) => {
+    const walkDate = new Date(w.date);
+    const now = new Date();
+    const weekAgo = new Date(now.setDate(now.getDate() - 7));
+    return walkDate >= weekAgo;
+  });
+
+  const totalMinutes = thisWeekWalks.reduce((sum, w) => {
+    if (!w.start_time || !w.end_time) return sum;
+    const [sh, sm] = w.start_time.split(":").map(Number);
+    const [eh, em] = w.end_time.split(":").map(Number);
+    return sum + (eh * 60 + em) - (sh * 60 + sm);
+  }, 0);
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const lastWalk = walks[0];
+
   return (
     <div
       style={{
@@ -115,7 +146,7 @@ function Dashboard({ onNavigate }) {
                 lineHeight: 1,
               }}
             >
-              5
+              {thisWeekWalks.length}
             </p>
           </div>
           <div
@@ -136,7 +167,7 @@ function Dashboard({ onNavigate }) {
                 lineHeight: 1,
               }}
             >
-              5h 42m
+              {hours}h {minutes}m
             </p>
           </div>
         </div>
@@ -192,34 +223,48 @@ function Dashboard({ onNavigate }) {
         >
           Last walk
         </p>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <p style={{ fontSize: "15px", fontWeight: "500", margin: 0 }}>
-              Today, 8:14am
-            </p>
-            <p style={{ fontSize: "13px", color: "#666", margin: "4px 0 0" }}>
-              45 min · Hampstead Heath
-            </p>
-          </div>
+        {lastWalk ? (
           <div
             style={{
-              background: "#EAF3DE",
-              color: "#3B6D11",
-              fontSize: "11px",
-              fontWeight: "500",
-              padding: "4px 10px",
-              borderRadius: "8px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            Good day
+            <div>
+              <p style={{ fontSize: "15px", fontWeight: "500", margin: 0 }}>
+                {new Date(lastWalk.date).toLocaleDateString("en-GB", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "short",
+                })}
+              </p>
+              <p style={{ fontSize: "13px", color: "#666", margin: "4px 0 0" }}>
+                {lastWalk.location || "No location set"}
+              </p>
+            </div>
+            <div
+              style={{
+                background: "#EAF3DE",
+                color: "#3B6D11",
+                fontSize: "11px",
+                fontWeight: "500",
+                padding: "4px 10px",
+                borderRadius: "8px",
+              }}
+            >
+              {lastWalk.behaviour >= 4
+                ? "Good girl"
+                : lastWalk.behaviour >= 3
+                  ? "Pretty good"
+                  : "Bad doggy"}
+            </div>
           </div>
-        </div>
+        ) : (
+          <p style={{ fontSize: "14px", color: "#aaa", margin: 0 }}>
+            No walks logged yet
+          </p>
+        )}
       </div>
 
       <div
