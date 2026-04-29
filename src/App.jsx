@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "./supabase";
 
 function App() {
   const [screen, setScreen] = useState("dashboard");
@@ -259,8 +260,30 @@ function Dashboard({ onNavigate }) {
 function LogWalk({ onNavigate }) {
   const [weather, setWeather] = useState(null);
   const [behaviour, setBehaviour] = useState(4);
-  const [friends, setFriends] = useState(["Biscuit", "Mochi"]);
+  const [friends, setFriends] = useState([]);
   const [friendInput, setFriendInput] = useState("");
+  const [location, setLocation] = useState("");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("08:45");
+
+  const saveWalk = async () => {
+    const { error } = await supabase.from("walks").insert([
+      {
+        date: new Date().toISOString().split("T")[0],
+        location,
+        start_time: startTime,
+        end_time: endTime,
+        weather,
+        behaviour,
+        friends: friends.join(", "),
+      },
+    ]);
+    if (error) {
+      alert("Something went wrong: " + error.message);
+    } else {
+      onNavigate("dashboard");
+    }
+  };
 
   const behaviourLabels = {
     1: "Bad doggy 😈",
@@ -336,7 +359,9 @@ function LogWalk({ onNavigate }) {
           </p>
           <input
             type="text"
-            placeholder="e.g. Hampstead Heath"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="e.g. Danesfield"
             style={{
               width: "100%",
               border: "none",
@@ -353,23 +378,21 @@ function LogWalk({ onNavigate }) {
               flexWrap: "wrap",
             }}
           >
-            {["Hampstead Heath", "Victoria Park", "Local streets"].map(
-              (loc) => (
-                <span
-                  key={loc}
-                  style={{
-                    fontSize: "12px",
-                    color: "#3B6D11",
-                    background: "#EAF3DE",
-                    padding: "3px 10px",
-                    borderRadius: "20px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {loc}
-                </span>
-              ),
-            )}
+            {["Danesfield", "Astral Park", "FraserFields"].map((loc) => (
+              <span
+                key={loc}
+                style={{
+                  fontSize: "12px",
+                  color: "#3B6D11",
+                  background: "#EAF3DE",
+                  padding: "3px 10px",
+                  borderRadius: "20px",
+                  cursor: "pointer",
+                }}
+              >
+                {loc}
+              </span>
+            ))}
           </div>
         </div>
 
@@ -408,7 +431,12 @@ function LogWalk({ onNavigate }) {
                 </p>
                 <input
                   type="time"
-                  defaultValue={i === 0 ? "08:00" : "08:45"}
+                  value={i === 0 ? startTime : endTime}
+                  onChange={(e) =>
+                    i === 0
+                      ? setStartTime(e.target.value)
+                      : setEndTime(e.target.value)
+                  }
                   style={{
                     border: "none",
                     outline: "none",
@@ -611,6 +639,7 @@ function LogWalk({ onNavigate }) {
       </div>
 
       <button
+        onClick={saveWalk}
         style={{
           width: "100%",
           padding: "14px",
