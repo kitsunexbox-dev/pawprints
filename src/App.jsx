@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { supabase } from "./supabase";
 
 function App() {
@@ -708,6 +709,8 @@ function Analytics({ onNavigate }) {
   const [period, setPeriod] = useState("week");
   const [walks, setWalks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   useEffect(() => {
     const fetchWalks = async () => {
@@ -778,6 +781,47 @@ function Analytics({ onNavigate }) {
         ),
       };
     }
+  };
+
+  const generateSummary = async () => {
+    setSummaryLoading(true);
+    const walkSummary = walks.map((w) => ({
+      date: w.date,
+      location: w.location,
+      duration: (() => {
+        if (!w.start_time || !w.end_time) return null;
+        const [sh, sm] = w.start_time.split(":").map(Number);
+        const [eh, em] = w.end_time.split(":").map(Number);
+        return eh * 60 + em - (sh * 60 + sm);
+      })(),
+      weather: w.weather,
+      behaviour: w.behaviour,
+      friends: w.friends,
+    }));
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-opus-4-5",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: `You are a helpful dog walking assistant. Analyse this walk data and give 3 short, friendly, specific insights about patterns you notice. Focus on things like which locations lead to better behaviour, which dog friends have a positive or negative effect, how weather affects the walks, and any timing patterns. Be conversational and specific — mention actual location names and friend names from the data. Keep each insight to one sentence and keep each sentence under 15 words. Data: ${JSON.stringify(walkSummary)}`,
+          },
+        ],
+      }),
+    });
+
+    const data = await response.json();
+    setSummary(data.content[0].text);
+    setSummaryLoading(false);
   };
 
   const chartData = walks.length
@@ -1134,6 +1178,58 @@ function Analytics({ onNavigate }) {
               });
           })()}
         </div>
+      </div>
+
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: "12px",
+          border: "0.5px solid #e0e0e0",
+          padding: "16px 20px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "12px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "11px",
+              color: "#888",
+              margin: 0,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            AI Summary
+          </p>
+          <button
+            onClick={generateSummary}
+            style={{
+              fontSize: "12px",
+              padding: "5px 12px",
+              borderRadius: "20px",
+              border: "0.5px solid #ddd",
+              background: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            {summaryLoading ? "Thinking..." : "Generate"}
+          </button>
+        </div>
+        {summary ? (
+          <div style={{ fontSize: "14px", color: "#444", lineHeight: "1.6" }}>
+            <ReactMarkdown>{summary}</ReactMarkdown>
+          </div>
+        ) : (
+          <p style={{ fontSize: "13px", color: "#aaa", margin: 0 }}>
+            Tap generate to get AI insights based on your walk data.
+          </p>
+        )}
       </div>
     </div>
   );
