@@ -706,29 +706,85 @@ function LogWalk({ onNavigate }) {
 function Analytics({ onNavigate }) {
   const [metric, setMetric] = useState("time");
   const [period, setPeriod] = useState("week");
+  const [walks, setWalks] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = {
-    time: {
-      week: [312, 420, 380, 440],
-      day: [42, 68, 0, 55, 71, 45, 30],
-      month: [1400, 1620, 1380, 1710],
-    },
-    count: {
-      week: [7, 9, 8, 10],
-      day: [1, 2, 0, 1, 2, 1, 1],
-      month: [30, 35, 32, 38],
-    },
+  useEffect(() => {
+    const fetchWalks = async () => {
+      const { data, error } = await supabase
+        .from("walks")
+        .select("*")
+        .order("date", { ascending: true });
+      if (!error) setWalks(data);
+      setLoading(false);
+    };
+    fetchWalks();
+  }, []);
+
+  const getChartData = () => {
+    if (period === "week") {
+      const weeks = ["Wk 1", "Wk 2", "Wk 3", "Wk 4"];
+      const vals = weeks.map((_, i) => {
+        const weekWalks = walks.filter((w) => {
+          const day = new Date(w.date).getDate();
+          return day >= i * 7 + 1 && day <= (i + 1) * 7;
+        });
+        if (metric === "count") return weekWalks.length;
+        return weekWalks.reduce((sum, w) => {
+          if (!w.start_time || !w.end_time) return sum;
+          const [sh, sm] = w.start_time.split(":").map(Number);
+          const [eh, em] = w.end_time.split(":").map(Number);
+          return sum + (eh * 60 + em) - (sh * 60 + sm);
+        }, 0);
+      });
+      return { vals, labels: weeks };
+    }
+
+    if (period === "day") {
+      const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const vals = dayNames.map((_, i) => {
+        const dayWalks = walks.filter((w) => {
+          const d = new Date(w.date).getDay();
+          const adjusted = d === 0 ? 6 : d - 1;
+          return adjusted === i;
+        });
+        if (metric === "count") return dayWalks.length;
+        return dayWalks.reduce((sum, w) => {
+          if (!w.start_time || !w.end_time) return sum;
+          const [sh, sm] = w.start_time.split(":").map(Number);
+          const [eh, em] = w.end_time.split(":").map(Number);
+          return sum + (eh * 60 + em) - (sh * 60 + sm);
+        }, 0);
+      });
+      return { vals, labels: dayNames };
+    }
+
+    if (period === "month") {
+      const months = [...new Set(walks.map((w) => w.date.slice(0, 7)))];
+      const vals = months.map((m) => {
+        const monthWalks = walks.filter((w) => w.date.startsWith(m));
+        if (metric === "count") return monthWalks.length;
+        return monthWalks.reduce((sum, w) => {
+          if (!w.start_time || !w.end_time) return sum;
+          const [sh, sm] = w.start_time.split(":").map(Number);
+          const [eh, em] = w.end_time.split(":").map(Number);
+          return sum + (eh * 60 + em) - (sh * 60 + sm);
+        }, 0);
+      });
+      return {
+        vals,
+        labels: months.map((m) =>
+          new Date(m).toLocaleString("en-GB", { month: "short" }),
+        ),
+      };
+    }
   };
 
-  const labels = {
-    week: ["Wk 1", "Wk 2", "Wk 3", "Wk 4"],
-    day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    month: ["Jan", "Feb", "Mar", "Apr"],
-  };
-
-  const vals = data[metric][period];
-  const max = Math.max(...vals);
-
+  const chartData = walks.length
+    ? getChartData()
+    : { vals: [0], labels: ["-"] };
+  const vals = chartData.vals;
+  const max = Math.max(...vals) || 1;
   return (
     <div
       style={{
@@ -856,7 +912,7 @@ function Analytics({ onNavigate }) {
           ))}
         </div>
         <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-          {labels[period].map((l) => (
+          {chartData.labels.map((l) => (
             <div
               key={l}
               style={{
@@ -886,7 +942,17 @@ function Analytics({ onNavigate }) {
             Avg per {period}
           </p>
           <p style={{ fontSize: "20px", fontWeight: "500", margin: 0 }}>
-            {metric === "time" ? "5h 12m" : "8.5"}
+            {metric === "time"
+              ? (() => {
+                  const avg = Math.round(
+                    vals.filter((v) => v > 0).reduce((a, b) => a + b, 0) /
+                      (vals.filter((v) => v > 0).length || 1),
+                  );
+                  return `${Math.floor(avg / 60)}h ${avg % 60}m`;
+                })()
+              : (vals.reduce((a, b) => a + b, 0) / (vals.length || 1)).toFixed(
+                  1,
+                )}
           </p>
         </div>
         <div
@@ -900,7 +966,12 @@ function Analytics({ onNavigate }) {
             Best {period}
           </p>
           <p style={{ fontSize: "20px", fontWeight: "500", margin: 0 }}>
-            {metric === "time" ? "7h 20m" : "10"}
+            {metric === "time"
+              ? (() => {
+                  const best = Math.max(...vals);
+                  return `${Math.floor(best / 60)}h ${best % 60}m`;
+                })()
+              : Math.max(...vals)}
           </p>
         </div>
       </div>
@@ -924,6 +995,7 @@ function Analytics({ onNavigate }) {
         >
           Patterns
         </p>
+
         <p style={{ fontSize: "13px", fontWeight: "500", margin: "0 0 10px" }}>
           Behaviour by weather
         </p>
@@ -936,35 +1008,45 @@ function Analytics({ onNavigate }) {
           }}
         >
           {[
-            ["☀️", 90],
-            ["⛅", 70],
-            ["🌧️", 45],
-            ["❄️", 50],
-          ].map(([icon, h]) => (
-            <div
-              key={icon}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "4px",
-                height: "100%",
-                justifyContent: "flex-end",
-              }}
-            >
+            ["☀️", "Sunny"],
+            ["⛅", "Cloudy"],
+            ["🌧️", "Rainy"],
+            ["❄️", "Cold"],
+          ].map(([icon, weather]) => {
+            const weatherWalks = walks.filter(
+              (w) => w.weather === weather && w.behaviour,
+            );
+            const avg = weatherWalks.length
+              ? weatherWalks.reduce((sum, w) => sum + w.behaviour, 0) /
+                weatherWalks.length
+              : 0;
+            const h = Math.round((avg / 5) * 100);
+            return (
               <div
+                key={weather}
                 style={{
-                  width: "100%",
-                  background: "#639922",
-                  borderRadius: "3px",
-                  height: `${h}%`,
-                  opacity: h / 100,
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "4px",
+                  height: "100%",
+                  justifyContent: "flex-end",
                 }}
-              />
-              <span style={{ fontSize: "12px" }}>{icon}</span>
-            </div>
-          ))}
+              >
+                <div
+                  style={{
+                    width: "100%",
+                    background: "#639922",
+                    borderRadius: "3px",
+                    height: `${h}%`,
+                    opacity: 0.4 + (h / 100) * 0.6,
+                  }}
+                />
+                <span style={{ fontSize: "12px" }}>{icon}</span>
+              </div>
+            );
+          })}
         </div>
 
         <p
@@ -973,47 +1055,84 @@ function Analytics({ onNavigate }) {
           Behaviour by friend
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {[
-            ["Biscuit", 92],
-            ["Mochi", 72],
-            ["Solo", 58],
-          ].map(([name, pct]) => (
-            <div
-              key={name}
-              style={{ display: "flex", alignItems: "center", gap: "8px" }}
-            >
-              <span style={{ fontSize: "12px", color: "#666", width: "52px" }}>
-                {name}
-              </span>
-              <div
-                style={{
-                  flex: 1,
-                  background: "#f0f0f0",
-                  borderRadius: "3px",
-                  height: "8px",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${pct}%`,
-                    background: "#639922",
-                    borderRadius: "3px",
-                    height: "100%",
-                  }}
-                />
-              </div>
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "#aaa",
-                  width: "28px",
-                  textAlign: "right",
-                }}
-              >
-                {(pct / 20).toFixed(1)}
-              </span>
-            </div>
-          ))}
+          {(() => {
+            const friendMap = {};
+            walks.forEach((w) => {
+              const friends = w.friends
+                ? w.friends
+                    .split(",")
+                    .map((f) => f.trim())
+                    .filter(Boolean)
+                : [];
+              if (friends.length === 0) {
+                if (!friendMap["Solo"]) friendMap["Solo"] = [];
+                friendMap["Solo"].push(w.behaviour);
+              } else {
+                friends.forEach((f) => {
+                  if (!friendMap[f]) friendMap[f] = [];
+                  friendMap[f].push(w.behaviour);
+                });
+              }
+            });
+            const maxAvg = Math.max(
+              ...Object.values(friendMap).map(
+                (arr) => arr.reduce((a, b) => a + b, 0) / arr.length,
+              ),
+            );
+            return Object.entries(friendMap)
+              .sort(
+                (a, b) =>
+                  b[1].reduce((x, y) => x + y, 0) / b[1].length -
+                  a[1].reduce((x, y) => x + y, 0) / a[1].length,
+              )
+              .map(([name, scores]) => {
+                const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+                const pct = Math.round((avg / maxAvg) * 100);
+                return (
+                  <div
+                    key={name}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <span
+                      style={{ fontSize: "12px", color: "#666", width: "52px" }}
+                    >
+                      {name}
+                    </span>
+                    <div
+                      style={{
+                        flex: 1,
+                        background: "#f0f0f0",
+                        borderRadius: "3px",
+                        height: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${pct}%`,
+                          background: "#639922",
+                          borderRadius: "3px",
+                          height: "100%",
+                        }}
+                      />
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        color: "#aaa",
+                        width: "28px",
+                        textAlign: "right",
+                      }}
+                    >
+                      {avg.toFixed(1)}
+                    </span>
+                  </div>
+                );
+              });
+          })()}
         </div>
       </div>
     </div>
