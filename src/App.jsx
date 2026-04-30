@@ -18,6 +18,7 @@ function App() {
       {screen === "dashboard" && <Dashboard onNavigate={setScreen} />}
       {screen === "log" && <LogWalk onNavigate={setScreen} />}
       {screen === "analytics" && <Analytics onNavigate={setScreen} />}
+      {screen === "records" && <Records onNavigate={setScreen} />}
     </div>
   );
 }
@@ -299,6 +300,20 @@ function Dashboard({ onNavigate }) {
           Analytics
         </button>
       </div>
+      <button
+        onClick={() => onNavigate("records")}
+        style={{
+          width: "100%",
+          padding: "14px",
+          fontSize: "14px",
+          borderRadius: "8px",
+          border: "0.5px solid #ddd",
+          background: "#fff",
+          cursor: "pointer",
+        }}
+      >
+        View records
+      </button>
     </div>
   );
 }
@@ -1234,6 +1249,223 @@ function Analytics({ onNavigate }) {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function Records({ onNavigate }) {
+  const [walks, setWalks] = useState([]);
+  const [confirmId, setConfirmId] = useState(null);
+
+  useEffect(() => {
+    const fetchWalks = async () => {
+      const { data, error } = await supabase
+        .from("walks")
+        .select("*")
+        .order("date", { ascending: false });
+      if (!error) setWalks(data);
+    };
+    fetchWalks();
+  }, []);
+
+  const deleteWalk = async (id) => {
+    const { error } = await supabase.from("walks").delete().eq("id", id);
+    if (!error) {
+      setWalks(walks.filter((w) => w.id !== id));
+      setConfirmId(null);
+    }
+  };
+
+  const formatDate = (date) =>
+    new Date(date).toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+
+  const formatDuration = (start, end) => {
+    if (!start || !end) return null;
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    const mins = eh * 60 + em - (sh * 60 + sm);
+    return `${Math.floor(mins / 60) > 0 ? Math.floor(mins / 60) + "h " : ""}${mins % 60}m`;
+  };
+
+  const behaviourLabel = (b) => {
+    if (b >= 5) return "Angel";
+    if (b >= 4) return "Good girl";
+    if (b >= 3) return "Pretty good";
+    if (b >= 2) return "Could be better";
+    return "Bad doggy";
+  };
+
+  return (
+    <div
+      style={{
+        padding: "24px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <button
+          onClick={() => onNavigate("dashboard")}
+          style={{
+            width: "32px",
+            height: "32px",
+            borderRadius: "50%",
+            border: "0.5px solid #ddd",
+            background: "#fff",
+            cursor: "pointer",
+            fontSize: "16px",
+          }}
+        >
+          ←
+        </button>
+        <div>
+          <p style={{ fontSize: "18px", fontWeight: "500", margin: 0 }}>
+            Records
+          </p>
+          <p style={{ fontSize: "13px", color: "#888", margin: 0 }}>
+            {walks.length} walks logged
+          </p>
+        </div>
+      </div>
+
+      {walks.length === 0 && (
+        <p
+          style={{
+            fontSize: "14px",
+            color: "#aaa",
+            textAlign: "center",
+            marginTop: "40px",
+          }}
+        >
+          No walks logged yet
+        </p>
+      )}
+
+      {walks.map((w) => (
+        <div
+          key={w.id}
+          style={{
+            background: "#fff",
+            borderRadius: "12px",
+            border:
+              confirmId === w.id
+                ? "1.5px solid #e24b4a"
+                : "0.5px solid #e0e0e0",
+            padding: "16px 20px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "4px",
+                }}
+              >
+                <p style={{ fontSize: "15px", fontWeight: "500", margin: 0 }}>
+                  {formatDate(w.date)}
+                </p>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "#3B6D11",
+                    background: "#EAF3DE",
+                    padding: "2px 8px",
+                    borderRadius: "20px",
+                  }}
+                >
+                  {behaviourLabel(w.behaviour)}
+                </span>
+              </div>
+              <p style={{ fontSize: "13px", color: "#666", margin: "0 0 2px" }}>
+                {w.location || "No location"} ·{" "}
+                {formatDuration(w.start_time, w.end_time) || "No duration"}
+              </p>
+              {w.weather && (
+                <p
+                  style={{ fontSize: "12px", color: "#aaa", margin: "0 0 2px" }}
+                >
+                  {w.weather}
+                  {w.friends ? ` · ${w.friends}` : ""}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => setConfirmId(confirmId === w.id ? null : w.id)}
+              style={{
+                fontSize: "12px",
+                color: "#e24b4a",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px 8px",
+                marginLeft: "8px",
+              }}
+            >
+              Delete
+            </button>
+          </div>
+
+          {confirmId === w.id && (
+            <div
+              style={{
+                marginTop: "12px",
+                paddingTop: "12px",
+                borderTop: "0.5px solid #f0f0f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <p style={{ fontSize: "13px", color: "#e24b4a", margin: 0 }}>
+                Delete this walk?
+              </p>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => setConfirmId(null)}
+                  style={{
+                    fontSize: "12px",
+                    padding: "5px 12px",
+                    borderRadius: "20px",
+                    border: "0.5px solid #ddd",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deleteWalk(w.id)}
+                  style={{
+                    fontSize: "12px",
+                    padding: "5px 12px",
+                    borderRadius: "20px",
+                    border: "none",
+                    background: "#e24b4a",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Yes, delete
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
