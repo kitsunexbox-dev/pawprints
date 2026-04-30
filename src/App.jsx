@@ -427,6 +427,7 @@ function LogWalk({ onNavigate }) {
             {["Danesfield", "Astral Park", "FraserFields"].map((loc) => (
               <span
                 key={loc}
+                onClick={() => setLocation(loc)}
                 style={{
                   fontSize: "12px",
                   color: "#3B6D11",
@@ -515,6 +516,7 @@ function LogWalk({ onNavigate }) {
               ["⛅", "Cloudy"],
               ["🌧️", "Rainy"],
               ["❄️", "Cold"],
+              ["💨", "Windy"],
             ].map(([icon, label]) => (
               <div
                 key={label}
@@ -1056,6 +1058,7 @@ function Analytics({ onNavigate }) {
             ["⛅", "Cloudy"],
             ["🌧️", "Rainy"],
             ["❄️", "Cold"],
+            ["💨", "Windy"],
           ].map(([icon, weather]) => {
             const weatherWalks = walks.filter(
               (w) => w.weather === weather && w.behaviour,
